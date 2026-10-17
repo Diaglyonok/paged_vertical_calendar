@@ -35,6 +35,7 @@ class PagedVerticalCalendar extends StatefulWidget {
     DateTime? initialDate,
     this.monthBuilder,
     this.dayBuilder,
+    this.monthOverlayBuilder,
     this.addAutomaticKeepAlives = false,
     this.onDayPressed,
     this.onMonthLoaded,
@@ -72,6 +73,13 @@ class PagedVerticalCalendar extends StatefulWidget {
   /// * [context]
   /// * [DateTime] date
   final DayBuilder? dayBuilder;
+
+  /// an optional Builder for a layer painted over the days grid of a month,
+  /// sized to the grid. return `null` to paint nothing for that month.
+  /// * [context]
+  /// * [int] month: 1-12
+  /// * [int] year: 2021
+  final MonthOverlayBuilder? monthOverlayBuilder;
 
   /// if the calendar should stay cached when the widget is no longer loaded.
   /// this can be used for maintaining the last state. defaults to `false`
@@ -269,6 +277,7 @@ class _PagedVerticalCalendarState extends State<PagedVerticalCalendar> {
                         month: month,
                         monthBuilder: widget.monthBuilder,
                         dayBuilder: widget.dayBuilder,
+                        monthOverlayBuilder: widget.monthOverlayBuilder,
                         onDayPressed: widget.onDayPressed,
                         startWeekWithSunday: widget.startWeekWithSunday,
                         weekDaysToHide: widget.weekdaysToHide,
@@ -288,6 +297,7 @@ class _PagedVerticalCalendarState extends State<PagedVerticalCalendar> {
                         month: month,
                         monthBuilder: widget.monthBuilder,
                         dayBuilder: widget.dayBuilder,
+                        monthOverlayBuilder: widget.monthOverlayBuilder,
                         onDayPressed: widget.onDayPressed,
                         startWeekWithSunday: widget.startWeekWithSunday,
                         weekDaysToHide: widget.weekdaysToHide);
@@ -314,6 +324,7 @@ class _MonthView extends StatelessWidget {
     required this.month,
     this.monthBuilder,
     this.dayBuilder,
+    this.monthOverlayBuilder,
     this.onDayPressed,
     required this.weekDaysToHide,
     required this.startWeekWithSunday,
@@ -322,6 +333,7 @@ class _MonthView extends StatelessWidget {
   final Month month;
   final MonthBuilder? monthBuilder;
   final DayBuilder? dayBuilder;
+  final MonthOverlayBuilder? monthOverlayBuilder;
   final ValueChanged<DateTime>? onDayPressed;
   final bool startWeekWithSunday;
   final List<int> weekDaysToHide;
@@ -344,30 +356,46 @@ class _MonthView extends StatelessWidget {
               month: month.month,
               year: month.year,
             ),
-        GridView.builder(
-          addRepaintBoundaries: false,
-          physics: NeverScrollableScrollPhysics(),
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: DateTime.daysPerWeek - weekDaysToHide.length,
-          ),
-          itemCount: validDates.length + blankSpaces,
-          itemBuilder: (BuildContext context, int index) {
-            if (index < blankSpaces) return SizedBox();
+        _withOverlay(
+          context,
+          GridView.builder(
+            addRepaintBoundaries: false,
+            physics: NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            padding: EdgeInsets.zero,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: DateTime.daysPerWeek - weekDaysToHide.length,
+            ),
+            itemCount: validDates.length + blankSpaces,
+            itemBuilder: (BuildContext context, int index) {
+              if (index < blankSpaces) return SizedBox();
 
-            final date = validDates[index - blankSpaces];
-            return AspectRatio(
-              aspectRatio: 1.0,
-              child: InkWell(
-                onTap: onDayPressed == null ? null : () => onDayPressed!(date),
-                child: dayBuilder?.call(context, date) ??
-                    _DefaultDayView(date: date),
-              ),
-            );
-          },
+              final date = validDates[index - blankSpaces];
+              return AspectRatio(
+                aspectRatio: 1.0,
+                child: InkWell(
+                  onTap: onDayPressed == null ? null : () => onDayPressed!(date),
+                  child: dayBuilder?.call(context, date) ??
+                      _DefaultDayView(date: date),
+                ),
+              );
+            },
+          ),
         ),
         SizedBox(height: 20),
+      ],
+    );
+  }
+
+  /// the days [grid] with the [monthOverlayBuilder] layer on top, if any.
+  Widget _withOverlay(BuildContext context, Widget grid) {
+    final overlay =
+        monthOverlayBuilder?.call(context, month.month, month.year);
+    if (overlay == null) return grid;
+    return Stack(
+      children: [
+        grid,
+        Positioned.fill(child: overlay),
       ],
     );
   }
@@ -424,5 +452,7 @@ class _DefaultDayView extends StatelessWidget {
 typedef MonthBuilder = Widget Function(
     BuildContext context, int month, int year);
 typedef DayBuilder = Widget Function(BuildContext context, DateTime date);
+typedef MonthOverlayBuilder = Widget? Function(
+    BuildContext context, int month, int year);
 
 typedef OnMonthLoaded = void Function(int year, int month);
